@@ -1,8 +1,4 @@
-// Importing required modules
-const {
-    app,
-    BrowserWindow
-} = require('electron');
+const { app, BrowserWindow, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const DiscordRPC = require('discord-rpc');
@@ -14,22 +10,27 @@ utils.updateMenu();
 
 // Create the main application window
 async function createWindow() {
+    const { width, height } = screen.getPrimaryDisplay().workAreaSize;
+    const zoomFactor = Math.min(width / 1280, height / 749);
+
     globals.mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 749,
+        width: Math.round(1280 * zoomFactor),
+        height: Math.round(749 * zoomFactor),
         autoHideMenuBar: true,
         menuBarVisible: false,
-        icon: 'icons/PR',
+        icon: path.join(__dirname, 'icons', 'PR.png'), // Ensure the icon path is correct
         show: false,
         webPreferences: {
             nodeIntegration: true,
-            contextIsolation: false,
+            contextIsolation: false, // Consider setting this to true for security
             enableRemoteModule: true,
             preload: path.join(__dirname, 'preload.js'),
             persistSessionStorage: true,
             persistUserDataDirName: 'Pokerogue'
         }
     });
+
+    globals.mainWindow.webContents.setZoomFactor(zoomFactor);
 
     // Register global shortcuts when the game window is focused
     globals.mainWindow.on('focus', utils.registerGlobalShortcuts);
@@ -54,64 +55,27 @@ async function createWindow() {
     globals.mainWindow.on('closed', async () => {
         globals.mainWindow = null;
 
-        // Close the wiki window if it's open
-        if (globals.wikiWindow) {
-            globals.wikiWindow.close();
-            globals.wikiWindow = null;
-        }
-
-        // Close the pokedex window if it's open
-        if (globals.pokedexWindow) {
-            globals.pokedexWindow.close();
-            globals.pokedexWindow = null;
-        }
-
-        // Close the type chart window if it's open
-        if (globals.typeChartWindow) {
-            globals.typeChartWindow.close();
-            globals.typeChartWindow = null;
-        }
-
-        // Close the horizontal type chart window if it's open
-        if (globals.horizontalTypeChartWindow) {
-            globals.horizontalTypeChartWindow.close();
-            globals.horizontalTypeChartWindow = null;
-        }
-
-        // Close the type calculator window if it's open
-        if (globals.typeCalculatorWindow) {
-            globals.typeCalculatorWindow.close();
-            globals.typeCalculatorWindow = null;
-        }
-
-        // Close the team builder window if it's open
-        if (globals.teamBuilderWindow) {
-            globals.teamBuilderWindow.close();
-            globals.teamBuilderWindow = null;
-        }
-
-        // Close the Smogon window if it's open
-        if (globals.smogonWindow) {
-            globals.smogonWindow.close();
-            globals.smogonWindow = null;
-        }
+        // Close the auxiliary windows if they are open
+        ['wikiWindow', 'pokedexWindow', 'typeChartWindow', 'horizontalTypeChartWindow', 'typeCalculatorWindow', 'teamBuilderWindow', 'smogonWindow'].forEach(window => {
+            if (globals[window]) {
+                globals[window].close();
+                globals[window] = null;
+            }
+        });
 
         utils.unregisterGlobalShortcuts();
-
         app.quit();
     });
 
-    if(globals.discordEnabled) {
+    if (globals.discordEnabled) {
         const clientId = '1232165629046292551';
         DiscordRPC.register(clientId);
-        const rpc = new DiscordRPC.Client({
-            transport: 'ipc'
-        });
+        const rpc = new DiscordRPC.Client({ transport: 'ipc' });
 
         let startTime = Date.now();
         let adjustedPlayTime = 0;
         let sessionStartTime = 0;
-        
+
         rpc.connect(clientId)
             .then(() => {
                 rpc.on('ready', () => {
@@ -119,9 +83,7 @@ async function createWindow() {
                     updateDiscordPresence();
                     setInterval(updateDiscordPresence, 1000);
                 });
-                rpc.login({
-                    clientId
-                }).catch(console.error);
+                rpc.login({ clientId }).catch(console.error);
             })
             .catch(error => {
                 console.log('Discord Rich Presence is not available! %O', error);
@@ -131,10 +93,8 @@ async function createWindow() {
         async function updateDiscordPresence() {
             globals.mainWindow.webContents.executeJavaScript('window.gameInfo', true)
                 .then((gameInfo) => {
-                    // Process the gameInfo data
                     let gameData = gameInfo;
 
-                    // Check if the user is on the menu
                     if (gameData.gameMode === 'Title') {
                         adjustedPlayTime = -1;
                         rpc.setActivity({
@@ -145,24 +105,16 @@ async function createWindow() {
                             instance: true,
                         });
                     } else {
-                        // Format the details string
                         const details = `${gameData.gameMode} | Wave: ${gameData.wave} | ${gameData.biome}`;
+                        let state = `Party:\n${gameData.party.map((pokemon) => `Lv. ${pokemon.level} ${pokemon.name}`).join('\n')}`;
 
-                        // Format the state string with the Pokemon list
-                        let state = `Party:\n${gameData.party
-                .map((pokemon) => `Lv. ${pokemon.level} ${pokemon.name}`)
-                .join('\n')}`;
-
-                        if (state.length > 128) {
-                            state = state.substring(0, 125) + "...";
-                        }
+                        if (state.length > 128) state = state.substring(0, 125) + "...";
 
                         if (adjustedPlayTime === -1) {
                             sessionStartTime = Date.now();
                             adjustedPlayTime = gameData.playTime * 1000;
                         }
 
-                        // Update the Rich Presence
                         rpc.setActivity({
                             details: details,
                             state: state,
@@ -176,7 +128,6 @@ async function createWindow() {
                     }
                 })
                 .catch((error) => {
-                    // Fallback for non-existing code
                     rpc.setActivity({
                         startTimestamp: startTime,
                         largeImageKey: 'logo2',
@@ -193,16 +144,10 @@ async function createWindow() {
         globals.mainWindow.loadURL('https://pokerogue.net/');
     }
 
-    // Fix the resolution
+    // Adjust the resolution
     globals.mainWindow.webContents.on('did-finish-load', () => {
-        const gameWidth = 1280;
-        const gameHeight = 770;
         setTimeout(() => {
-            globals.mainWindow.setSize(gameWidth, 769); // nice
-            globals.mainWindow.setSize(gameWidth, gameHeight);
             globals.mainWindow.show();
-
-            // Load the settings after the game has finished loading
             utils.loadSettings();
             globals.mainWindow.center();
         }, 100);
@@ -212,39 +157,31 @@ async function createWindow() {
 // Handle app events
 app.whenReady().then(() => {
     if (process.platform === 'darwin') {
-        // For macOS, use the user's Documents directory
         globals.gameDir = path.join(app.getPath('documents'), 'PokeRogue', 'game');
     } else {
-        // For other platforms, use the game folder in the app's resource directory
         globals.gameDir = path.join(__dirname, '../..', 'game');
     }
     globals.gameFilesDownloaded = fs.existsSync(globals.gameDir);
     globals.currentVersionPath = path.join(globals.gameDir, 'currentVersion.txt');
 
-    // Check if the --clear-cache flag is present
     if (process.argv.includes('--clear-cache')) {
         const userDataPath = app.getPath('userData');
         const settingsFilePath = path.join(userDataPath, 'settings.json');
         const localStorageDirPath = path.join(userDataPath, 'Local Storage');
 
-        // Get all files and directories in the user data path
         const files = fs.readdirSync(userDataPath);
 
-        // Delete all files and directories except for settings.json and Local Storage folder
         files.forEach(file => {
             const filePath = path.join(userDataPath, file);
             if (filePath !== settingsFilePath && filePath !== localStorageDirPath) {
                 if (fs.lstatSync(filePath).isDirectory()) {
-                    fs.rmdirSync(filePath, {
-                        recursive: true
-                    });
+                    fs.rmdirSync(filePath, { recursive: true });
                 } else {
                     fs.unlinkSync(filePath);
                 }
             }
         });
 
-        // Remove the --clear-cache flag from the command line arguments
         app.commandLine.removeSwitch('clear-cache');
     }
 

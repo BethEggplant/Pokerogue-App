@@ -64,11 +64,19 @@
     },
     "linux": {
       "icon": "icons/PR.png",
-      "target": "AppImage"
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ]
     },
     "mac": {
       "icon": "icons/PR.icns",
       "target": "dmg"
     }
-  }
+  }  
 }
